@@ -1,0 +1,106 @@
+{
+  "realm": "robot-realm",
+  "enabled": true,
+  "displayName": "Robot Reception - Realm",
+  "sslRequired": "external",
+  "accessTokenLifespan": 900,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Full access: view visitor logs, command robot movement, modify robot parameters."
+      },
+      {
+        "name": "operator",
+        "description": "Can view visitor logs and command robot movement. Cannot modify robot parameters."
+      },
+      {
+        "name": "robot",
+        "description": "M2M identity for the simulated robot. Sends data only; cannot read visitor logs or modify its own parameters."
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "robot-service",
+      "name": "Simulated Robot (M2M)",
+      "description": "OAuth2 Client Credentials client for the simulated reception robot, per EF-05.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${env.ROBOT_CLIENT_SECRET}",
+      "attributes": {
+        "access.token.lifespan": "300"
+      },
+      "defaultClientScopes": [
+        "profile",
+        "roles"
+      ]
+    },
+    {
+      "clientId": "dashboard-app",
+      "name": "Supervision Dashboard",
+      "description": "OAuth2 Authorization Code client for human dashboard users (admin/operator), per Sprint 3 auth flows.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${env.DASHBOARD_CLIENT_SECRET}",
+      "redirectUris": [
+        "http://localhost:8002/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8002"
+      ],
+      "attributes": {
+        "access.token.lifespan": "900"
+      },
+      "defaultClientScopes": [
+        "profile",
+        "roles",
+        "email"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "demo-admin",
+      "enabled": true,
+      "email": "demo-admin@example.local",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${env.DEMO_ADMIN_PASSWORD}",
+          "temporary": true
+        }
+      ],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "demo-operator",
+      "enabled": true,
+      "email": "demo-operator@example.local",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${env.DEMO_OPERATOR_PASSWORD}",
+          "temporary": true
+        }
+      ],
+      "realmRoles": ["operator"]
+    }
+  ],
+  "_comment_service_account_role": "The robot-service client's built-in service account must be assigned the 'robot' realm role after import — Keycloak's realm-export JSON does not reliably wire service-account role mappings on first import across versions. Do this once via: Admin Console > Clients > robot-service > Service Account Roles > Assign role > robot. Sprint 3 docs will include the equivalent kcadm.sh / Admin REST command for reproducibility.",
+  "_comment_secrets": "Placeholders like ${env.ROBOT_CLIENT_SECRET} are resolved by Keycloak's config value providers at import time, sourced from environment variables — never hardcode real secrets in this file (ENF-05/ENF-08). Demo user passwords are marked temporary so they must be changed on first login."
+}
