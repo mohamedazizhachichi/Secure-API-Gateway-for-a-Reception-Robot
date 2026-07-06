@@ -10,6 +10,4 @@ COPY main.py .
 RUN useradd -m appuser
 USER appuser
 
-EXPOSE 8002
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port $SERVICE_PORT"]

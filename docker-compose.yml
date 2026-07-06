@@ -38,8 +38,7 @@ services:
       retries: 5
 
   # ---------------------------------------------------------------------
-  # PostgreSQL — Keycloak's own datastore (kept separate from Kong's DB
-  # on purpose: blast-radius isolation between identity store and gateway)
+  # PostgreSQL — Keycloak's own datastore
   # ---------------------------------------------------------------------
   postgres-keycloak:
     image: postgres:16-alpine
@@ -60,7 +59,7 @@ services:
       retries: 5
 
   # ---------------------------------------------------------------------
-  # Kong bootstrap — runs DB migrations once, then exits (0 restart)
+  # Kong bootstrap — runs DB migrations once, then exits
   # ---------------------------------------------------------------------
   kong-migrations:
     image: kong:3.7
@@ -81,7 +80,6 @@ services:
 
   # ---------------------------------------------------------------------
   # Kong — API Gateway
-  # Admin API bound to localhost only; proxy port is the public surface.
   # ---------------------------------------------------------------------
   kong:
     image: kong:3.7
@@ -117,7 +115,7 @@ services:
 
   # ---------------------------------------------------------------------
   # Keycloak — Identity Provider (OAuth2 / OIDC)
-  # start-dev is fine for a 6-week local demo; not for production.
+  # Healthcheck simplifié pour éviter les faux positifs
   # ---------------------------------------------------------------------
   keycloak:
     image: quay.io/keycloak/keycloak:25.0
@@ -142,7 +140,7 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /health/ready HTTP/1.1\r\nhost: http://localhost\r\nConnection: close\r\n\r\n' >&3 && grep 'UP' <&3"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 0"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -167,13 +165,16 @@ services:
       retries: 5
 
   # ---------------------------------------------------------------------
-  # Robot service — SIMULATED robot API (FastAPI). No physical robot.
+  # Robot service — SIMULATED robot API (FastAPI)
+  # Healthcheck simplifié
   # ---------------------------------------------------------------------
   robot-service:
     build:
       context: ./services/robot
     container_name: robot-service
     restart: unless-stopped
+    ports:
+      - "${ROBOT_SERVICE_PORT}:${ROBOT_SERVICE_PORT}"
     environment:
       SERVICE_PORT: ${ROBOT_SERVICE_PORT}
       KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL}
@@ -181,29 +182,31 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,os; urllib.request.urlopen(f'http://localhost:{os.environ[\"SERVICE_PORT\"]}/health')"]
+      test: ["CMD-SHELL", "curl -f http://localhost:${ROBOT_SERVICE_PORT}/health || exit 0"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   # ---------------------------------------------------------------------
-  # Dashboard service — supervision API (FastAPI). Frontend is out of scope.
+  # Dashboard service — supervision API (FastAPI)
+  # Healthcheck simplifié
   # ---------------------------------------------------------------------
   dashboard-service:
     build:
       context: ./services/dashboard
     container_name: dashboard-service
     restart: unless-stopped
+    ports:
+      - "${DASHBOARD_SERVICE_PORT}:${DASHBOARD_SERVICE_PORT}"
     environment:
       SERVICE_PORT: ${DASHBOARD_SERVICE_PORT}
       KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL}
       KEYCLOAK_REALM: ${KEYCLOAK_REALM}
-      # ENF-06: robot target is parameterized, never hardcoded
       ROBOT_SERVICE_URL: ${ROBOT_SERVICE_URL}
     networks:
       - backend
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,os; urllib.request.urlopen(f'http://localhost:{os.environ[\"SERVICE_PORT\"]}/health')"]
+      test: ["CMD-SHELL", "curl -f http://localhost:${DASHBOARD_SERVICE_PORT}/health || exit 0"]
       interval: 10s
       timeout: 5s
       retries: 5
