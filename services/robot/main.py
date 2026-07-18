@@ -8,8 +8,10 @@ No hardware, no firmware — this process only *pretends* to move a robot.
 import os
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
+from rbac import require_role, require_any_role
+from jwt_middleware import JWTAuthMiddleware
 
 app = FastAPI(
     title="Simulated Reception Robot API",
@@ -17,7 +19,8 @@ app = FastAPI(
                  "No physical robot is connected at any point in this project.",
     version="0.1.0",
 )
-
+# Ajouter le middleware JWT (défense en profondeur)
+app.add_middleware(JWTAuthMiddleware, exclude_paths={"/health"})
 # CORRECTION : Le port est lu DEPUIS LA VARIABLE D'ENVIRONNEMENT
 # et stocké dans une variable globale (visible par uvicorn)
 SERVICE_PORT = int(os.environ.get("SERVICE_PORT", 8002))
@@ -76,6 +79,25 @@ def move_robot(cmd: MoveCommand):
         status=_robot_state["status"],
         timestamp=_robot_state["last_command_at"],
     )
+
+@app.get("/robot/config")
+def get_robot_config(request: Request):
+    """Admin-only endpoint: voir la configuration du robot."""
+    require_role(request, "admin")
+    return {
+        "max_speed": 1.0,
+        "battery_threshold": 15,
+        "auto_return": True,
+        "language": "fr-FR"
+    }
+
+
+@app.post("/robot/config")
+def update_robot_config(request: Request, config: dict):
+    """Admin-only endpoint: modifier la configuration du robot."""
+    require_role(request, "admin")
+    # Ici, vous pourriez sauvegarder la config dans une base de données
+    return {"status": "updated", "config": config}
 
 
 # CORRECTION : Le serveur est lancé ici avec la variable SERVICE_PORT
