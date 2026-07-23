@@ -1,4 +1,4 @@
-# Secure API Gateway — Sprint 3 Prep Skeleton
+
 
 Simulation-only. No physical robot at any point (Cahier des Charges V3, §1/§3).
 
