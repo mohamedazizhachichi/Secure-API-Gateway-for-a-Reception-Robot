@@ -19,7 +19,7 @@ USAGE in an endpoint:
         ...
 """
 
-from fastapi import Request, HTTPException
+from fastapi import HTTPException, Request
 
 
 def get_roles(request: Request) -> set[str]:
