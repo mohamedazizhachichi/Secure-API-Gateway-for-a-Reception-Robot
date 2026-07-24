@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
-from rbac import require_role, require_any_role
+from rbac import require_role
 from jwt_middleware import JWTAuthMiddleware
 
 app = FastAPI(
