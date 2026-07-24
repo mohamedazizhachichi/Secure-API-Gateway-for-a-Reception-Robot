@@ -67,12 +67,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # PYSEC-2026-1325 (ecdsa) ignoré volontairement : pas de correctif prévu
+      # par les mainteneurs (canal auxiliaire hors périmètre), verification
+      # non affectée, et notre système utilise RS256 (RSA) pas ECDSA.
       - name: Install pip-audit
         run: pip install pip-audit
       - name: Audit robot-service dependencies
-        run: pip-audit -r services/robot/requirements.txt
+        run: pip-audit -r services/robot/requirements.txt --ignore-vuln PYSEC-2026-1325
       - name: Audit dashboard-service dependencies
-        run: pip-audit -r services/dashboard/requirements.txt
+        run: pip-audit -r services/dashboard/requirements.txt --ignore-vuln PYSEC-2026-1325
 
   # ===========================================================================
   # 5. BUILD + CONTAINER SCAN — build les images, puis scan CVEs (Trivy)
