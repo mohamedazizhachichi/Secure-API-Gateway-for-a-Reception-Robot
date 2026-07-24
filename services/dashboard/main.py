@@ -8,10 +8,10 @@ import os
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import Depends, FastAPI, HTTPException, Request
+from jwt_middleware import JWTAuthMiddleware
 from pydantic import BaseModel
 from rbac import require_role
-from jwt_middleware import JWTAuthMiddleware
 
 app = FastAPI(
     title="Supervision Dashboard API",
@@ -23,7 +23,7 @@ app = FastAPI(
 app.add_middleware(JWTAuthMiddleware, exclude_paths={"/health"})
 
 # CORRECTION : Le port est lu depuis la variable d'environnement
-SERVICE_PORT = int(os.environ.get("SERVICE_PORT", 8003))
+SERVICE_PORT = int(os.environ.get("SERVICE_PORT", "8003"))
 ROBOT_SERVICE_URL = os.environ.get("ROBOT_SERVICE_URL", "http://robot-service:8002")
 
 # In-memory visitor log store
