@@ -24,7 +24,7 @@ import time
 import httpx
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from jose import jwt, JWTError
+from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 
 KEYCLOAK_INTERNAL_URL = os.environ.get("KEYCLOAK_INTERNAL_URL", "http://keycloak:8080")

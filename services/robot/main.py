@@ -9,9 +9,9 @@ import os
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
-from rbac import require_role, require_any_role
 from jwt_middleware import JWTAuthMiddleware
+from pydantic import BaseModel
+from rbac import require_role
 
 app = FastAPI(
     title="Simulated Reception Robot API",
@@ -23,7 +23,7 @@ app = FastAPI(
 app.add_middleware(JWTAuthMiddleware, exclude_paths={"/health"})
 # CORRECTION : Le port est lu DEPUIS LA VARIABLE D'ENVIRONNEMENT
 # et stocké dans une variable globale (visible par uvicorn)
-SERVICE_PORT = int(os.environ.get("SERVICE_PORT", 8002))
+SERVICE_PORT = int(os.environ.get("SERVICE_PORT", "8002"))
 
 # In-memory simulated robot state
 _robot_state = {
