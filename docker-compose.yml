@@ -1,0 +1,274 @@
+version: "3.9"
+
+# =============================================================================
+# Secure API Gateway for Simulated Reception Robot — Docker Compose skeleton
+# Sprint 3 prep. All secrets come from .env (never hardcoded — see ENF-05/08).
+# =============================================================================
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  kong_pg_data:
+  keycloak_pg_data:
+  redis_data:
+  grafana_data: 
+services:
+
+  # ---------------------------------------------------------------------
+  # PostgreSQL — Kong's own datastore
+  # ---------------------------------------------------------------------
+  postgres-kong:
+    image: postgres:16-alpine
+    container_name: postgres-kong
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KONG_PG_DB}
+      POSTGRES_USER: ${KONG_PG_USER}
+      POSTGRES_PASSWORD: ${KONG_PG_PASSWORD}
+    volumes:
+      - kong_pg_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KONG_PG_USER} -d ${KONG_PG_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------
+  # PostgreSQL — Keycloak's own datastore
+  # ---------------------------------------------------------------------
+  postgres-keycloak:
+    image: postgres:16-alpine
+    container_name: postgres-keycloak
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KEYCLOAK_PG_DB}
+      POSTGRES_USER: ${KEYCLOAK_PG_USER}
+      POSTGRES_PASSWORD: ${KEYCLOAK_PG_PASSWORD}
+    volumes:
+      - keycloak_pg_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_PG_USER} -d ${KEYCLOAK_PG_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------
+  # Kong bootstrap — runs DB migrations once, then exits
+  # ---------------------------------------------------------------------
+  kong-migrations:
+    image: kong:3.7
+    container_name: kong-migrations
+    command: kong migrations bootstrap
+    restart: on-failure
+    depends_on:
+      postgres-kong:
+        condition: service_healthy
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: postgres-kong
+      KONG_PG_DATABASE: ${KONG_PG_DB}
+      KONG_PG_USER: ${KONG_PG_USER}
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD}
+    networks:
+      - backend
+
+  # ---------------------------------------------------------------------
+  # Kong — API Gateway
+  # ---------------------------------------------------------------------
+  kong:
+    image: kong:3.7
+    container_name: kong
+    restart: unless-stopped
+    depends_on:
+      kong-migrations:
+        condition: service_completed_successfully
+      postgres-kong:
+        condition: service_healthy
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: postgres-kong
+      KONG_PG_DATABASE: ${KONG_PG_DB}
+      KONG_PG_USER: ${KONG_PG_USER}
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD}
+      KONG_PROXY_LISTEN: "0.0.0.0:${KONG_PROXY_PORT}"
+      KONG_ADMIN_LISTEN: "0.0.0.0:${KONG_ADMIN_PORT}"
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+    ports:
+      - "${KONG_PROXY_PORT}:${KONG_PROXY_PORT}"
+      - "${KONG_ADMIN_PORT}:${KONG_ADMIN_PORT}"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------
+  # Keycloak — Identity Provider (OAuth2 / OIDC)
+  # Healthcheck simplifié pour éviter les faux positifs
+  # ---------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: keycloak
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm"]
+    depends_on:
+      postgres-keycloak:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres-keycloak:5432/${KEYCLOAK_PG_DB}
+      KC_DB_USERNAME: ${KEYCLOAK_PG_USER}
+      KC_DB_PASSWORD: ${KEYCLOAK_PG_PASSWORD}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HEALTH_ENABLED: "true"
+      ROBOT_CLIENT_SECRET: ${ROBOT_CLIENT_SECRET}
+      DASHBOARD_CLIENT_SECRET: ${DASHBOARD_CLIENT_SECRET}
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 0"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---------------------------------------------------------------------
+  # Redis — backend store for Kong's rate-limiting plugin
+  # ---------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------
+  # Robot service — SIMULATED robot API (FastAPI)
+  # Healthcheck simplifié
+  # ---------------------------------------------------------------------
+  robot-service:
+    build:
+      context: ./services/robot
+    container_name: robot-service
+    restart: unless-stopped
+    ports:
+      - "${ROBOT_SERVICE_PORT}:${ROBOT_SERVICE_PORT}"
+    environment:
+      SERVICE_PORT: ${ROBOT_SERVICE_PORT}
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:${ROBOT_SERVICE_PORT}/health || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------
+  # Dashboard service — supervision API (FastAPI)
+  # Healthcheck simplifié
+  # ---------------------------------------------------------------------
+  dashboard-service:
+    build:
+      context: ./services/dashboard
+    container_name: dashboard-service
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_SERVICE_PORT}:${DASHBOARD_SERVICE_PORT}"
+    environment:
+      SERVICE_PORT: ${DASHBOARD_SERVICE_PORT}
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      ROBOT_SERVICE_URL: ${ROBOT_SERVICE_URL}
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:${DASHBOARD_SERVICE_PORT}/health || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
+
+      # ---------------------------------------------------------------------
+  # Loki — Log aggregation system
+  # ---------------------------------------------------------------------
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    restart: unless-stopped
+    ports:
+      - "9080:9080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./promtail-config.yaml:/etc/promtail/config.yaml
+    command: -config.file=/etc/promtail/config.yaml
+    networks:
+      - backend
+    depends_on:
+      - loki
+  # ---------------------------------------------------------------------
+  # Grafana — Visualization dashboard
+  # ---------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - backend
+    depends_on:
+      - loki
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+
+      
