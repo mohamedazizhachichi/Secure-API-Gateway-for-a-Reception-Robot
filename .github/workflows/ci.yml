@@ -2,7 +2,7 @@ name: CI/CD - Secure API Gateway
 
 on:
   push:
-    branches: [ main, develop 'MP-18-*' ]
+    branches: [ main, develop, 'MP-18-*' ]
   pull_request:
     branches: [ main ]
 
