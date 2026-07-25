@@ -139,10 +139,11 @@ services:
       - ./keycloak:/opt/keycloak/data/import:ro
     ports:
       - "8080:8080"
+      - "9000:9000"
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 0"]
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/health/ready"]
       interval: 15s
       timeout: 5s
       retries: 10
