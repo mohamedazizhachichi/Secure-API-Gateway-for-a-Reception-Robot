@@ -146,7 +146,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 60s
 
   # ---------------------------------------------------------------------
   # Redis — backend store for Kong's rate-limiting plugin

@@ -168,6 +168,20 @@ jobs:
             done
           '
 
+      - name: Verify Keycloak is ready
+        run: |
+          echo "Waiting for Keycloak to be ready..."
+          for i in {1..60}; do
+            if curl -sS -f http://localhost:8080/health/ready > /dev/null 2>&1; then
+              echo "Keycloak is ready (attempt $i)"
+              exit 0
+            fi
+            echo "Keycloak not ready yet (attempt $i/60)"
+            sleep 5
+          done
+          echo "Keycloak not ready after 60 attempts"
+          docker compose logs keycloak --tail=30
+          exit 1
       - name: Configure Kong (auth) and Kong (RBAC)
         run: |
           set -a; source .env; set +a
