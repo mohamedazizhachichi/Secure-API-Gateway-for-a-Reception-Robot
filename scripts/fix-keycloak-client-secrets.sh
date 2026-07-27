@@ -243,7 +243,25 @@ echo "===== END DEBUG USER JSON ====="
 echo "===== DEBUG CREDENTIALS ${username} ====="
 curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" "${ADMIN_API}/users/${USER_ID}/credentials" | python3 -m json.tool
 echo "===== END DEBUG CREDENTIALS ====="
+echo "===== DEBUG PASSWORD CHECK ====="
 
+for username in demo-admin demo-operator
+do
+
+USER_ID=$(curl -sS \
+-H "Authorization: Bearer ${ADMIN_TOKEN}" \
+"${ADMIN_API}/users?username=${username}" \
+| python3 -c 'import sys,json; print(json.load(sys.stdin)[0]["id"])')
+
+
+curl -sS \
+-H "Authorization: Bearer ${ADMIN_TOKEN}" \
+"${ADMIN_API}/users/${USER_ID}/credentials" \
+| python3 -m json.tool
+
+done
+
+echo "===== END DEBUG PASSWORD CHECK ====="
 
   fi
 done
@@ -269,6 +287,26 @@ for username in demo-admin demo-operator; do
   fi
 done
 echo ""
+echo ""
+echo "===== DEBUG AFTER UPDATE ====="
+
+for username in demo-admin demo-operator
+do
+  USER_ID=$(curl -sS \
+  -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  "${ADMIN_API}/users?username=${username}" \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)[0]["id"])')
+
+  echo "DEBUG USER ${username} ID=${USER_ID}"
+
+  curl -sS \
+  -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  "${ADMIN_API}/users/${USER_ID}" \
+  | python3 -m json.tool
+
+done
+
+echo "===== END DEBUG AFTER UPDATE ====="
 echo "===== TEST LOGIN demo-admin ====="
 
 curl -v -X POST \
