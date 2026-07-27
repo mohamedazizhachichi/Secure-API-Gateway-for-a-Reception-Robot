@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
+set -a
+source .env
+set +a
 # test-rbac.sh — Sprint 4, Task 2
 #
 # IMPORTANT CAVEAT: dashboard-app is configured for Authorization Code flow

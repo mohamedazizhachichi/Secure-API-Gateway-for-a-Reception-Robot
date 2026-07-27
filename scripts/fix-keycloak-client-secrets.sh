@@ -131,6 +131,20 @@ if [ "$CLIENT_EXISTS" -eq "0" ]; then
 else
   echo "  test-cli client existe déjà"
 fi
+echo ""
+echo "===== DEBUG : Configuration du client test-cli ====="
+
+CLIENT_UUID=$(curl -sS \
+  -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  "${ADMIN_API}/clients?clientId=test-cli" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['id'] if d else '')")
+
+echo "Client UUID: ${CLIENT_UUID}"
+
+curl -sS \
+  -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  "${ADMIN_API}/clients/${CLIENT_UUID}" \
+  | python3 -m json.tool
 # =============================================================================
 # 6. Créer les utilisateurs demo-admin et demo-operator s'ils n'existent pas
 # =============================================================================
@@ -244,6 +258,18 @@ for username in demo-admin demo-operator; do
     echo "  Utilisateur ${username} non trouvé"
   fi
 done
+echo ""
+echo "===== TEST LOGIN demo-admin ====="
+
+curl -v -X POST \
+"${KEYCLOAK_BASE}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token" \
+--data-urlencode "grant_type=password" \
+--data-urlencode "client_id=test-cli" \
+--data-urlencode "username=demo-admin" \
+--data-urlencode "password=${DEMO_ADMIN_PASSWORD}"
+
+echo ""
+echo "===== FIN TEST LOGIN demo-admin ====="
 echo ""
 echo "== Vérification : test immédiat d'obtention d'un token robot =="
 TEST_TOKEN=$(curl -sS -X POST "${KEYCLOAK_BASE}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token" \
