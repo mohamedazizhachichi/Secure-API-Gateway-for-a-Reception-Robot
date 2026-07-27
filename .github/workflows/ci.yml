@@ -194,6 +194,20 @@ jobs:
           ./scripts/setup-kong.sh
           ./scripts/setup-rbac.sh
 
+      - name: Wait for Kong routes to become active
+        run: |
+          set -a; source .env; set +a
+          for i in {1..20}; do
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "http://127.0.0.1:${KONG_PROXY_PORT}/robot/state")
+            if [ "$STATUS" != "404" ]; then
+              echo "Route /robot active (statut: $STATUS, tentative $i)"
+              exit 0
+            fi
+            echo "Route /robot pas encore active (404, tentative $i/20)"
+            sleep 1
+          done
+          echo "Route toujours inactive apres 20s"
+          exit 1
       - name: Debug - inspect Kong state
         run: |
           echo "--- Services ---"
