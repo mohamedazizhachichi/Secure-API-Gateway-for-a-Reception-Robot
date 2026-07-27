@@ -131,10 +131,11 @@ if [ "$CLIENT_EXISTS" -eq "0" ]; then
 else
   echo "  test-cli client existe déjà"
 fi
+
 # =============================================================================
-# 6. Supprimer les actions en attente pour les utilisateurs
+# 6. Forcer emailVerified et supprimer les actions en attente
 # =============================================================================
-echo "--- Suppression des actions en attente pour demo-admin et demo-operator ---"
+echo "--- Forcer emailVerified et supprimer les actions en attente ---"
 
 for username in demo-admin demo-operator; do
   USER_ID=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
@@ -142,11 +143,12 @@ for username in demo-admin demo-operator; do
     | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['id'] if d else '')")
   
   if [[ -n "${USER_ID}" ]]; then
+    # Mettre à jour l'utilisateur avec emailVerified=true et pas d'actions
     curl -sS -X PUT "${ADMIN_API}/users/${USER_ID}" \
       -H "Authorization: Bearer ${ADMIN_TOKEN}" \
       -H "Content-Type: application/json" \
-      -d '{"requiredActions": []}' > /dev/null
-    echo "  Actions en attente supprimées pour ${username}"
+      -d '{"emailVerified": true, "requiredActions": []}' > /dev/null
+    echo "  ${username} mis à jour (emailVerified=true, requiredActions=[])"
   else
     echo "  Utilisateur ${username} non trouvé"
   fi
