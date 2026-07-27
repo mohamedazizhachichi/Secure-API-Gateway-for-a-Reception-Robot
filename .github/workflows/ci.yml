@@ -189,6 +189,15 @@ jobs:
           ./scripts/fix-keycloak-client-secrets.sh
 
           echo "Waiting Keycloak stabilization..."
+      - name: Test minimal authentication
+        run: |
+          set -a; source .env; set +a
+          echo "Testing minimal authentication with curl..."
+          curl -sS -X POST "http://localhost:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token" 
+            --data-urlencode "grant_type=password" 
+            --data-urlencode "client_id=test-cli" 
+            --data-urlencode "username=demo-admin" 
+            --data-urlencode "password=${DEMO_ADMIN_PASSWORD}" | python3 -m json.tool
           sleep 10
       - name: Configure Kong (auth) and Kong (RBAC)
         run: |
