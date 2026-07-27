@@ -235,6 +235,11 @@ for username in demo-admin demo-operator; do
       "${ADMIN_API}/users/${USER_ID}" \
       | python3 -c "import sys,json; d=json.load(sys.stdin); print('emailVerified=' + str(d.get('emailVerified', False)) + ', enabled=' + str(d.get('enabled', False)) + ', requiredActions=' + str(d.get('requiredActions', [])))")
     echo "    ${USER_INFO}"
+echo ""
+echo "===== DEBUG USER JSON ${username} ====="
+curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" "${ADMIN_API}/users/${USER_ID}" | python3 -m json.tool
+echo "===== END DEBUG USER JSON ====="
+
   fi
 done
 # =============================================================================
