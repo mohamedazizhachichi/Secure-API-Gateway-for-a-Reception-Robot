@@ -102,7 +102,35 @@ set_user_password() {
 
 set_user_password "demo-admin" "${DEMO_ADMIN_PASSWORD}"
 set_user_password "demo-operator" "${DEMO_OPERATOR_PASSWORD}"
+# =============================================================================
+# 5. Créer le client test-cli pour les tests RBAC (Sprint 4)
+# =============================================================================
+echo "--- Création du client 'test-cli' pour les tests RBAC ---"
 
+CLIENT_EXISTS=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  "${ADMIN_API}/clients?clientId=test-cli" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d))")
+
+if [ "$CLIENT_EXISTS" -eq "0" ]; then
+  echo "  Création du client test-cli..."
+  curl -sS -X POST "${ADMIN_API}/clients" \
+    -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "clientId": "test-cli",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "description": "TEST ONLY: enables curl-based RBAC testing via ROPC. Not part of production auth flow."
+    }'
+  echo "  test-cli client créé"
+else
+  echo "  test-cli client existe déjà"
+fi
 echo ""
 echo "== Vérification : test immédiat d'obtention d'un token robot =="
 TEST_TOKEN=$(curl -sS -X POST "${KEYCLOAK_BASE}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token" \
