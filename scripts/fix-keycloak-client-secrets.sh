@@ -24,9 +24,6 @@ KEYCLOAK_BASE="http://localhost:8080"
 ADMIN_API="${KEYCLOAK_BASE}/admin/realms/${KEYCLOAK_REALM}"
 
 echo "== Obtention d'un token admin Keycloak =="
-echo "===== DEBUG REALM ====="
-curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" "${ADMIN_API}" | python3 -m json.tool
-echo "===== END DEBUG REALM ====="
 
 ADMIN_TOKEN=$(curl -sS -X POST "${KEYCLOAK_BASE}/realms/master/protocol/openid-connect/token" \
   --data-urlencode "grant_type=password" \

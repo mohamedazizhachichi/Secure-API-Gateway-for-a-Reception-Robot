@@ -84,7 +84,8 @@ ROBOT_TOKEN=$(curl -sS -X POST "${TOKEN_URL}" \
   --data-urlencode "client_id=${ROBOT_CLIENT_ID}" \
   --data-urlencode "client_secret=${ROBOT_CLIENT_SECRET}" \
   | python3 -c 'import sys,json; print(json.load(sys.stdin).get("access_token", ""))')
-
+echo "DEBUG admin password length: ${#DEMO_ADMIN_PASSWORD}"
+echo "DEBUG operator password length: ${#DEMO_OPERATOR_PASSWORD}"
 ADMIN_TOKEN_USER=$(get_user_token "demo-admin" "${DEMO_ADMIN_PASSWORD}")
 OPERATOR_TOKEN=$(get_user_token "demo-operator" "${DEMO_OPERATOR_PASSWORD}")
 
