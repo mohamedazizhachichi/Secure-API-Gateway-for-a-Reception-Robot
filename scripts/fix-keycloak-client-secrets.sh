@@ -239,6 +239,10 @@ echo ""
 echo "===== DEBUG USER JSON ${username} ====="
 curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" "${ADMIN_API}/users/${USER_ID}" | python3 -m json.tool
 echo "===== END DEBUG USER JSON ====="
+echo "===== DEBUG CREDENTIALS ${username} ====="
+curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" "${ADMIN_API}/users/${USER_ID}/credentials" | python3 -m json.tool
+echo "===== END DEBUG CREDENTIALS ====="
+
 
   fi
 done
