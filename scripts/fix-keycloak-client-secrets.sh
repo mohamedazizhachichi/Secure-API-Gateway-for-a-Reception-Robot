@@ -131,6 +131,26 @@ if [ "$CLIENT_EXISTS" -eq "0" ]; then
 else
   echo "  test-cli client existe déjà"
 fi
+# =============================================================================
+# 6. Supprimer les actions en attente pour les utilisateurs
+# =============================================================================
+echo "--- Suppression des actions en attente pour demo-admin et demo-operator ---"
+
+for username in demo-admin demo-operator; do
+  USER_ID=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+    "${ADMIN_API}/users?username=${username}&exact=true" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['id'] if d else '')")
+  
+  if [[ -n "${USER_ID}" ]]; then
+    curl -sS -X PUT "${ADMIN_API}/users/${USER_ID}" \
+      -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"requiredActions": []}' > /dev/null
+    echo "  Actions en attente supprimées pour ${username}"
+  else
+    echo "  Utilisateur ${username} non trouvé"
+  fi
+done
 echo ""
 echo "== Vérification : test immédiat d'obtention d'un token robot =="
 TEST_TOKEN=$(curl -sS -X POST "${KEYCLOAK_BASE}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token" \
