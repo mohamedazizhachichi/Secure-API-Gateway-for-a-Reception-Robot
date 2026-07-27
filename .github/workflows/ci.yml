@@ -182,6 +182,11 @@ jobs:
           echo "Keycloak not ready after 60 attempts"
           docker compose logs keycloak --tail=30
           exit 1
+      - name: Fix Keycloak client secrets
+        run: |
+          set -a; source .env; set +a
+          chmod +x scripts/fix-keycloak-client-secrets.sh
+          ./scripts/fix-keycloak-client-secrets.sh
       - name: Configure Kong (auth) and Kong (RBAC)
         run: |
           set -a; source .env; set +a
