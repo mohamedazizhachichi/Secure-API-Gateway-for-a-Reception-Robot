@@ -75,6 +75,34 @@ print(json.dumps(d))
 set_client_secret "robot-service" "${ROBOT_CLIENT_SECRET}"
 set_client_secret "dashboard-app" "${DASHBOARD_CLIENT_SECRET}"
 
+set_user_password() {
+  local username="$1" password_value="$2"
+
+  echo "--- Fixation du mot de passe pour l'utilisateur '${username}' ---"
+
+  USER_ID=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+    "${ADMIN_API}/users?username=${username}&exact=true" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['id'] if d else '')")
+
+  if [[ -z "${USER_ID}" ]]; then
+    echo "  ERREUR: utilisateur '${username}' introuvable dans le realm ${KEYCLOAK_REALM}." >&2
+    exit 1
+  fi
+
+  curl -sS -X PUT "${ADMIN_API}/users/${USER_ID}/reset-password" \
+    -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"type\": \"password\", \"value\": \"${password_value}\", \"temporary\": false}" > /dev/null
+
+  echo "    Mot de passe fixé pour '${username}' (UUID: ${USER_ID}, temporary=false)"
+}
+
+: "${DEMO_ADMIN_PASSWORD:?Missing DEMO_ADMIN_PASSWORD in .env}"
+: "${DEMO_OPERATOR_PASSWORD:?Missing DEMO_OPERATOR_PASSWORD in .env}"
+
+set_user_password "demo-admin" "${DEMO_ADMIN_PASSWORD}"
+set_user_password "demo-operator" "${DEMO_OPERATOR_PASSWORD}"
+
 echo ""
 echo "== Vérification : test immédiat d'obtention d'un token robot =="
 TEST_TOKEN=$(curl -sS -X POST "${KEYCLOAK_BASE}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token" \
