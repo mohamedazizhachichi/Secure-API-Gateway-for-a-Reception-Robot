@@ -194,6 +194,12 @@ jobs:
           ./scripts/setup-kong.sh
           ./scripts/setup-rbac.sh
 
+      - name: Debug - inspect Kong state
+        run: |
+          echo "--- Services ---"
+          curl -s http://127.0.0.1:8001/services | python3 -m json.tool
+          echo "--- Routes ---"
+          curl -s http://127.0.0.1:8001/routes | python3 -m json.tool
       - name: Run authentication test (Sprint 3)
         run: |
           set -a; source .env; set +a
