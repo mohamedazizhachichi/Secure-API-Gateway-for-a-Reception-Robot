@@ -131,7 +131,98 @@ if [ "$CLIENT_EXISTS" -eq "0" ]; then
 else
   echo "  test-cli client existe déjà"
 fi
+# =============================================================================
+# 6. Créer les utilisateurs demo-admin et demo-operator s'ils n'existent pas
+# =============================================================================
+echo "--- Création des utilisateurs demo-admin et demo-operator ---"
 
+create_user() {
+  local username="$1" password="$2" email="$3"
+  
+  # Vérifier si l'utilisateur existe déjà
+  USER_ID=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+    "${ADMIN_API}/users?username=${username}&exact=true" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['id'] if d else '')")
+  
+  if [[ -z "${USER_ID}" ]]; then
+    echo "  Création de l'utilisateur ${username}..."
+    # Créer l'utilisateur
+    USER_ID=$(curl -sS -X POST "${ADMIN_API}/users" \
+      -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"username\": \"${username}\",
+        \"email\": \"${email}\",
+        \"emailVerified\": true,
+        \"enabled\": true,
+        \"firstName\": \"${username}\",
+        \"lastName\": \"User\"
+      }" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id', ''))")
+    
+    if [[ -n "${USER_ID}" ]]; then
+      echo "  Utilisateur ${username} créé avec ID ${USER_ID}"
+      
+      # Définir le mot de passe
+      curl -sS -X PUT "${ADMIN_API}/users/${USER_ID}/reset-password" \
+        -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"type\": \"password\", \"value\": \"${password}\", \"temporary\": false}" > /dev/null
+      echo "  Mot de passe défini pour ${username}"
+      
+      # Assigner le rôle admin si c'est demo-admin
+      if [[ "${username}" == "demo-admin" ]]; then
+        ROLE_ID=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+          "${ADMIN_API}/roles" \
+          | python3 -c "import sys,json; d=json.load(sys.stdin); print([r['id'] for r in d if r['name']=='admin'][0] if [r for r in d if r['name']=='admin'] else '')")
+        if [[ -n "${ROLE_ID}" ]]; then
+          curl -sS -X POST "${ADMIN_API}/users/${USER_ID}/role-mappings/realm" \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "[{\"id\": \"${ROLE_ID}\", \"name\": \"admin\"}]" > /dev/null
+          echo "  Rôle admin assigné à ${username}"
+        fi
+      fi
+      
+      # Assigner le rôle operator si c'est demo-operator
+      if [[ "${username}" == "demo-operator" ]]; then
+        ROLE_ID=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+          "${ADMIN_API}/roles" \
+          | python3 -c "import sys,json; d=json.load(sys.stdin); print([r['id'] for r in d if r['name']=='operator'][0] if [r for r in d if r['name']=='operator'] else '')")
+        if [[ -n "${ROLE_ID}" ]]; then
+          curl -sS -X POST "${ADMIN_API}/users/${USER_ID}/role-mappings/realm" \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "[{\"id\": \"${ROLE_ID}\", \"name\": \"operator\"}]" > /dev/null
+          echo "  Rôle operator assigné à ${username}"
+        fi
+      fi
+    else
+      echo "  ERREUR: Impossible de créer l'utilisateur ${username}"
+    fi
+  else
+    echo "  Utilisateur ${username} existe déjà (ID: ${USER_ID})"
+  fi
+}
+
+create_user "demo-admin" "${DEMO_ADMIN_PASSWORD}" "demo-admin@example.local"
+create_user "demo-operator" "${DEMO_OPERATOR_PASSWORD}" "demo-operator@example.local"
+
+# Ajouter après la création des utilisateurs
+echo "--- Vérification des utilisateurs ---"
+for username in demo-admin demo-operator; do
+  USER_ID=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+    "${ADMIN_API}/users?username=${username}&exact=true" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['id'] if d else '')")
+  
+  if [[ -n "${USER_ID}" ]]; then
+    echo "  Utilisateur ${username}: ID=${USER_ID}"
+    # Vérifier l'état de l'utilisateur
+    USER_INFO=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+      "${ADMIN_API}/users/${USER_ID}" \
+      | python3 -c "import sys,json; d=json.load(sys.stdin); print('emailVerified=' + str(d.get('emailVerified', False)) + ', enabled=' + str(d.get('enabled', False)) + ', requiredActions=' + str(d.get('requiredActions', [])))")
+    echo "    ${USER_INFO}"
+  fi
+done
 # =============================================================================
 # 6. Forcer emailVerified et supprimer les actions en attente
 # =============================================================================
