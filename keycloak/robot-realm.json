@@ -81,7 +81,7 @@
         {
           "type": "password",
           "value": "${env.DEMO_ADMIN_PASSWORD}",
-          "temporary": true
+          "temporary": false
         }
       ],
       "realmRoles": ["admin"]
@@ -95,7 +95,7 @@
         {
           "type": "password",
           "value": "${env.DEMO_OPERATOR_PASSWORD}",
-          "temporary": true
+          "temporary": false
         }
       ],
       "realmRoles": ["operator"]
