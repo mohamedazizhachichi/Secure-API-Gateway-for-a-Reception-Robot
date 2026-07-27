@@ -187,6 +187,9 @@ jobs:
           set -a; source .env; set +a
           chmod +x scripts/fix-keycloak-client-secrets.sh
           ./scripts/fix-keycloak-client-secrets.sh
+
+          echo "Waiting Keycloak stabilization..."
+          sleep 10
       - name: Configure Kong (auth) and Kong (RBAC)
         run: |
           set -a; source .env; set +a
