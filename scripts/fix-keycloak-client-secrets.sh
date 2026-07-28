@@ -75,6 +75,38 @@ print(json.dumps(d))
 set_client_secret "robot-service" "${ROBOT_CLIENT_SECRET}"
 set_client_secret "dashboard-app" "${DASHBOARD_CLIENT_SECRET}"
 
+# -----------------------------------------------------------------------
+# Client de test "test-cli" : nécessaire pour que test-rbac.sh puisse
+# obtenir des tokens demo-admin/demo-operator via curl (Direct Access
+# Grants / ROPC), sans navigateur. Sur un Keycloak fraîchement importé
+# (CI), ce client n'existe pas tant qu'on ne le crée pas explicitement —
+# contrairement à un environnement local où il persiste d'une session à
+# l'autre une fois créé manuellement.
+# -----------------------------------------------------------------------
+echo "--- Vérification/création du client de test 'test-cli' ---"
+
+EXISTING=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  "${ADMIN_API}/clients?clientId=test-cli" \
+  | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+
+if [[ "${EXISTING}" == "0" ]]; then
+  curl -sS -X POST "${ADMIN_API}/clients" \
+    -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "clientId": "test-cli",
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "enabled": true,
+      "description": "TEST ONLY: permet a test-rbac.sh de recuperer des jetons via curl. Pas une voie normale d authentification en production."
+    }' > /dev/null
+  echo "    test-cli créé (public, Direct Access Grants activé)"
+else
+  echo "    test-cli existe déjà, réutilisé"
+fi
+
 set_user_password() {
   local username="$1" password_value="$2"
 
