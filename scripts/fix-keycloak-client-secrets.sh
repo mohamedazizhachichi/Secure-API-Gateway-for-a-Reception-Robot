@@ -132,12 +132,44 @@ set_user_password() {
   # dans keycloak/robot-realm.json). Sans cette étape, Keycloak refuse la
   # connexion avec "Account is not fully set up" même avec le bon mot de
   # passe — les deux mécanismes sont indépendants côté API Keycloak.
-  curl -sS -X PUT "${ADMIN_API}/users/${USER_ID}" \
+  #
+  # IMPORTANT : on récupère la représentation COMPLÈTE de l'utilisateur
+  # avant de modifier, comme pour set_client_secret — un PUT partiel
+  # (juste {"requiredActions": []}) peut être rejeté ou ignoré selon la
+  # version de Keycloak, sans erreur visible si on ne vérifie pas.
+  USER_JSON=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+    "${ADMIN_API}/users/${USER_ID}")
+
+  UPDATED_USER_JSON=$(echo "${USER_JSON}" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+d['requiredActions'] = []
+d['enabled'] = True
+print(json.dumps(d))
+")
+
+  HTTP_STATUS=$(curl -sS -o /tmp/put_response.json -w "%{http_code}" -X PUT "${ADMIN_API}/users/${USER_ID}" \
     -H "Authorization: Bearer ${ADMIN_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d '{"requiredActions": []}' > /dev/null
+    -d "${UPDATED_USER_JSON}")
 
-  echo "    Mot de passe fixé pour '${username}' (UUID: ${USER_ID}, temporary=false, requiredActions=[])"
+  if [[ "${HTTP_STATUS}" -ge 400 ]]; then
+    echo "  ERREUR (${HTTP_STATUS}) lors du nettoyage des requiredActions pour '${username}':" >&2
+    cat /tmp/put_response.json >&2
+    exit 1
+  fi
+
+  # Vérification factuelle : relire l'état réel plutôt que de supposer
+  VERIFY_JSON=$(curl -sS -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+    "${ADMIN_API}/users/${USER_ID}")
+  echo "    Vérification post-modification pour '${username}':"
+  echo "${VERIFY_JSON}" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(f\"      enabled={d.get('enabled')}, emailVerified={d.get('emailVerified')}, requiredActions={d.get('requiredActions')}\")
+"
+
+  echo "    Mot de passe fixé pour '${username}' (UUID: ${USER_ID}, temporary=false)"
 }
 
 : "${DEMO_ADMIN_PASSWORD:?Missing DEMO_ADMIN_PASSWORD in .env}"
