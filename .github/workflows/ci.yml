@@ -220,7 +220,23 @@ jobs:
           set -a; source .env; set +a
           chmod +x scripts/test-auth.sh
           ./scripts/test-auth.sh
+      - name: Keycloak diagnostic
+        run: |
+          set -a
+          source .env
+          set +a
 
+          chmod +x scripts/ci-keycloak-diagnose.sh
+          ./scripts/ci-keycloak-diagnose.sh
+        continue-on-error: true
+
+
+      - name: Upload Keycloak diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keycloak-debug
+          path: ci-debug/
       - name: Run RBAC test (Sprint 4)
         run: |
           set -a; source .env; set +a
