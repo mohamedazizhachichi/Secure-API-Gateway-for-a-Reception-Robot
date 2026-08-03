@@ -1,56 +1,54 @@
+# Secure API Gateway pour Robot de Réception
 
+## 📋 Description
 
-Simulation-only. No physical robot at any point (Cahier des Charges V3, §1/§3).
+API Gateway sécurisé pour un robot de réception. Gère l'authentification (OAuth2/JWT), l'autorisation (RBAC), le rate limiting et la journalisation des requêtes.
 
-## Quick start
+**Projet réalisé dans le cadre du stage chez TEK-UP.**
+
+---
+
+## 🏗️ Architecture
+
+| Composant | Rôle | Port |
+| :--- | :--- | :--- |
+| **Kong** | API Gateway | 8000 (proxy) / 8001 (admin) |
+| **Keycloak** | Authentification OAuth2/JWT | 8080 |
+| **FastAPI (Robot)** | API du robot simulé | 8002 |
+| **FastAPI (Dashboard)** | API du dashboard | 8003 |
+| **PostgreSQL** | Base de données (Kong + Keycloak) | 5432 / 5433 |
+| **Redis** | Cache (rate limiting) | 6379 |
+| **Grafana** | Visualisation des logs | 3000 |
+| **Loki** | Stockage des logs | 3100 |
+| **Promtail** | Collecte des logs | 9080 |
+
+---
+
+## 🚀 Installation rapide
+
+### Prérequis
+
+| Logiciel | Version |
+| :--- | :--- |
+| Docker | ≥ 24.x |
+| Docker Compose | ≥ 2.x |
+| Git | ≥ 2.x |
+
+### Installation
 
 ```bash
+# 1. Cloner le dépôt
+git clone https://github.com/R0B0-TEK/msbot-reception-academy.git
+cd msbot-reception-academy
+git checkout MP-18-Secure-API-Gateway-Mohamed-Aziz-Hachichi
+
+# 2. Créer le fichier .env
 cp .env.example .env
-# edit .env and set real values for every change_me_* placeholder
-docker-compose up -d --build
-```
 
-- Kong proxy: `http://localhost:8000`
-- Kong Admin API: `http://127.0.0.1:8444` (bound to localhost only, not exposed to the network)
-- Keycloak: `http://localhost:8080`
-- Robot service (direct, for dev only — not the intended entry point): `http://localhost:8001`
-- Dashboard service (direct, for dev only): `http://localhost:8002`
+# 3. Lancer les services
+docker compose up -d --build
 
-## What's included (Task 1)
-
-- Kong + its own Postgres, with a one-shot migrations container
-- Keycloak + its own Postgres (deliberately separate DB from Kong's)
-- Redis, password-protected, reserved for Kong's rate-limiting plugin (Sprint 4)
-- Two FastAPI skeletons: `robot-service` (simulated robot, EF-06) and `dashboard-service`
-- Health checks on every service
-- All config externalized to `.env` (gitignored); `.env.example` is the checked-in template
-
-## What's included (Task 2)
-
-`keycloak/robot-realm.json` — realm export with:
-- Realm `robot-realm`
-- Roles: `admin`, `operator`, `robot`
-- Client `robot-service`: Client Credentials only (`serviceAccountsEnabled: true`, `standardFlowEnabled: false`), access token lifespan 300s
-- Client `dashboard-app`: Authorization Code flow, access token lifespan 900s
-- Two demo human users (temporary passwords) for manual testing
-
-## Known gaps to close in Sprint 3 (flagging honestly rather than pretending this is done)
-
-1. **Kong ↔ Keycloak wiring is not yet configured.** This compose file stands both up but doesn't yet install the Kong `openid-connect` plugin, routes, or services pointing at `robot-service`/`dashboard-service`. That's the core Sprint 3 task — this skeleton is the foundation for it.
-2. **Service-account role mapping for `robot-service`.** Keycloak's realm-import JSON does not reliably attach a realm role to a client's *service account* user across versions. After first `docker-compose up`, verify in the Admin Console (Clients → robot-service → Service Account Roles) that the `robot` role is actually assigned — don't assume the JSON import did it. If it didn't, either assign it manually or automate it with `kcadm.sh`/the Admin REST API as a post-start step; worth documenting whichever you pick.
-3. **`${env.VAR}` secret placeholders in the realm JSON** rely on Keycloak resolving environment variables at import time. This is generally supported but is worth confirming against your exact Keycloak 25.0 behavior on first run — if secrets come through literally as the string `${env.ROBOT_CLIENT_SECRET}` instead of the real value, you'll need to set them manually via Admin Console or switch to Keycloak's vault provider syntax instead.
-4. **No RBAC/scope enforcement yet at Kong or in the FastAPI services** — both services currently trust whatever reaches them. That's expected for a skeleton; Sprint 4 is where the permissions matrix (admin/operator/robot) actually gets enforced.
-5. **Replay-attack risk (accepted per Cahier des Charges V3 §8/§10):** the 5-minute JWT lifetime bounds but does not eliminate replay within that window. Documented in the Cahier des Charges as an accepted risk for the simulated context — worth restating in the Sprint 5 security test report rather than treated as solved.
-
-## Directory layout
-
-```
-.
-├── docker-compose.yml
-├── .env.example
-├── keycloak/
-│   └── robot-realm.json
-├── services/
-│   ├── robot/       (FastAPI, EF-06 simulated robot)
-│   └── dashboard/    (FastAPI, dashboard backend)
-```
+# 4. Configurer les services
+bash scripts/fix-keycloak-client-secrets.sh
+bash scripts/setup-kong.sh
+bash scripts/setup-rbac.sh
