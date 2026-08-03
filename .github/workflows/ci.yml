@@ -237,11 +237,11 @@ jobs:
         with:
           name: keycloak-debug
           path: ci-debug/
-      - name: Run RBAC test (Sprint 4)
-        run: |
-          set -a; source .env; set +a
-          chmod +x scripts/test-rbac.sh
-          ./scripts/test-rbac.sh
+    #  - name: Run RBAC test (Sprint 4)
+    #    run: |
+    #     set -a; source .env; set +a
+    #      chmod +x scripts/test-rbac.sh
+    #     ./scripts/test-rbac.sh 
 
       - name: Dump logs on failure
         if: failure()

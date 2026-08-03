@@ -20,7 +20,7 @@ app = FastAPI(
 )
 
 # Ajouter le middleware JWT (défense en profondeur)
-app.add_middleware(JWTAuthMiddleware, exclude_paths={"/health"})
+app.add_middleware(JWTAuthMiddleware, exclude_paths={"/health", "/docs", "/openapi.json", "/redoc"})
 
 # CORRECTION : Le port est lu depuis la variable d'environnement
 SERVICE_PORT = int(os.environ.get("SERVICE_PORT", "8003"))
