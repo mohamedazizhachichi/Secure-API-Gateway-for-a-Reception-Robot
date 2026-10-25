@@ -1,56 +1,82 @@
-# Secure API Gateway — Sprint 3 Prep Skeleton
+# Secure API Gateway pour Robot de Réception
 
-Simulation-only. No physical robot at any point (Cahier des Charges V3, §1/§3).
+> API Gateway sécurisée pour un robot de réception — Authentification OAuth2/JWT, autorisation RBAC, rate limiting et journalisation centralisée.
 
-## Quick start
+![Statut](https://img.shields.io/badge/statut-terminé-success)
+![Stage](https://img.shields.io/badge/stage-6%20semaines-blue)
+![Docker](https://img.shields.io/badge/Docker-10%20conteneurs-2496ED?logo=docker&logoColor=white)
+![Kong](https://img.shields.io/badge/Kong-3.7-003459?logo=kong&logoColor=white)
+![Keycloak](https://img.shields.io/badge/Keycloak-25.0-4D4D4D?logo=keycloak&logoColor=white)
 
-```bash
-cp .env.example .env
-# edit .env and set real values for every change_me_* placeholder
-docker-compose up -d --build
-```
+---
 
-- Kong proxy: `http://localhost:8000`
-- Kong Admin API: `http://127.0.0.1:8444` (bound to localhost only, not exposed to the network)
-- Keycloak: `http://localhost:8080`
-- Robot service (direct, for dev only — not the intended entry point): `http://localhost:8001`
-- Dashboard service (direct, for dev only): `http://localhost:8002`
+## 📋 Description
 
-## What's included (Task 1)
+Ce projet a été réalisé dans le cadre d'un **stage de 6 semaines chez TEK-UP**. Il consiste à concevoir et implémenter une **API Gateway sécurisée** pour un robot de réception.
 
-- Kong + its own Postgres, with a one-shot migrations container
-- Keycloak + its own Postgres (deliberately separate DB from Kong's)
-- Redis, password-protected, reserved for Kong's rate-limiting plugin (Sprint 4)
-- Two FastAPI skeletons: `robot-service` (simulated robot, EF-06) and `dashboard-service`
-- Health checks on every service
-- All config externalized to `.env` (gitignored); `.env.example` is the checked-in template
+Le système agit comme une **porte d'entrée unique** entre les clients (dashboard, robot, utilisateurs) et les services internes, en appliquant les bonnes pratiques de cybersécurité (OWASP API Security Top 10) et de DevSecOps.
 
-## What's included (Task 2)
+**Décision de périmètre :** Le projet est développé et démontré **exclusivement en environnement de simulation** (services conteneurisés via Docker). Aucun déploiement sur robot physique réel n'est prévu dans le cadre du stage.
 
-`keycloak/robot-realm.json` — realm export with:
-- Realm `robot-realm`
-- Roles: `admin`, `operator`, `robot`
-- Client `robot-service`: Client Credentials only (`serviceAccountsEnabled: true`, `standardFlowEnabled: false`), access token lifespan 300s
-- Client `dashboard-app`: Authorization Code flow, access token lifespan 900s
-- Two demo human users (temporary passwords) for manual testing
+---
 
-## Known gaps to close in Sprint 3 (flagging honestly rather than pretending this is done)
+## 🎯 Objectifs
 
-1. **Kong ↔ Keycloak wiring is not yet configured.** This compose file stands both up but doesn't yet install the Kong `openid-connect` plugin, routes, or services pointing at `robot-service`/`dashboard-service`. That's the core Sprint 3 task — this skeleton is the foundation for it.
-2. **Service-account role mapping for `robot-service`.** Keycloak's realm-import JSON does not reliably attach a realm role to a client's *service account* user across versions. After first `docker-compose up`, verify in the Admin Console (Clients → robot-service → Service Account Roles) that the `robot` role is actually assigned — don't assume the JSON import did it. If it didn't, either assign it manually or automate it with `kcadm.sh`/the Admin REST API as a post-start step; worth documenting whichever you pick.
-3. **`${env.VAR}` secret placeholders in the realm JSON** rely on Keycloak resolving environment variables at import time. This is generally supported but is worth confirming against your exact Keycloak 25.0 behavior on first run — if secrets come through literally as the string `${env.ROBOT_CLIENT_SECRET}` instead of the real value, you'll need to set them manually via Admin Console or switch to Keycloak's vault provider syntax instead.
-4. **No RBAC/scope enforcement yet at Kong or in the FastAPI services** — both services currently trust whatever reaches them. That's expected for a skeleton; Sprint 4 is where the permissions matrix (admin/operator/robot) actually gets enforced.
-5. **Replay-attack risk (accepted per Cahier des Charges V3 §8/§10):** the 5-minute JWT lifetime bounds but does not eliminate replay within that window. Documented in the Cahier des Charges as an accepted risk for the simulated context — worth restating in the Sprint 5 security test report rather than treated as solved.
+| Objectif | Statut |
+| :--- | :--- |
+| Authentification centralisée (OAuth2/JWT) | ✅ |
+| Autorisation par rôles (RBAC) | ✅ |
+| Rate limiting (contrôle de trafic) | ✅ |
+| Journalisation et supervision | ✅ |
+| Conteneurisation (Docker Compose) | ✅ |
+| Pipeline CI/CD (DevSecOps) | ✅ |
 
-## Directory layout
+---
 
-```
-.
-├── docker-compose.yml
-├── .env.example
-├── keycloak/
-│   └── robot-realm.json
-├── services/
-│   ├── robot/       (FastAPI, EF-06 simulated robot)
-│   └── dashboard/    (FastAPI, dashboard backend)
-```
+## 🏗️ Architecture
+
+```mermaid
+flowchart TB
+    subgraph Clients["👤 CLIENTS"]
+        U["Utilisateur / Dashboard"]
+        R["Robot (M2M)"]
+    end
+
+    subgraph Gateway["🚪 API GATEWAY (Kong)"]
+        K["Kong Gateway"]
+        J["🔑 JWT Validation"]
+        A["🛡️ ACL (RBAC)"]
+        L["⏱️ Rate Limiting"]
+    end
+
+    subgraph Auth["🔐 AUTHENTIFICATION"]
+        KC["Keycloak<br/>OAuth2 / OIDC"]
+        PG1["PostgreSQL"]
+    end
+
+    subgraph Services["⚙️ SERVICES (FastAPI)"]
+        RS["Robot Service"]
+        DS["Dashboard Service"]
+    end
+
+    subgraph Data["💾 DONNÉES"]
+        PG2["PostgreSQL (Kong)"]
+        RD["Redis"]
+    end
+
+    subgraph Obs["📊 OBSERVABILITÉ"]
+        GF["Grafana"]
+        LK["Loki"]
+    end
+
+    U --> K
+    R --> K
+    K --> J --> A --> L
+    K --> RS
+    K --> DS
+    K --> KC
+    KC --> PG1
+    K --> PG2
+    K --> RD
+    K --> LK
+    LK --> GF
