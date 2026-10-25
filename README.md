@@ -12,7 +12,7 @@
 
 ## 📋 Description
 
-Ce projet a été réalisé dans le cadre d'un **stage de 6 semaines chez TEK-UP**. Il consiste à concevoir et implémenter une **API Gateway sécurisée** pour un robot de réception.
+Ce projet a été réalisé dans le cadre d'un **stage de 6 semaines chez ROBOTEK**. Il consiste à concevoir et implémenter une **API Gateway sécurisée** pour un robot de réception.
 
 Le système agit comme une **porte d'entrée unique** entre les clients (dashboard, robot, utilisateurs) et les services internes, en appliquant les bonnes pratiques de cybersécurité (OWASP API Security Top 10) et de DevSecOps.
 
