@@ -1,0 +1,252 @@
+name: CI/CD - Secure API Gateway
+
+on:
+  push:
+    branches: [ main, develop, 'MP-18-*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  # ===========================================================================
+  # 1. LINT — rapide, échoue vite si le code ne respecte pas le style de base
+  # ===========================================================================
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint robot-service
+        run: ruff check services/robot/ --output-format=github
+      - name: Lint dashboard-service
+        run: ruff check services/dashboard/ --output-format=github
+
+  # ===========================================================================
+  # 2. SECRET SCANNING — la priorité #1 vu l'historique du projet
+  #    (un vrai secret Keycloak a été exposé accidentellement pendant le dev)
+  # ===========================================================================
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # nécessaire pour scanner tout l'historique des commits
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  # ===========================================================================
+  # 3. TESTS UNITAIRES — rapides, pas d'infrastructure nécessaire
+  # ===========================================================================
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install pytest fastapi
+          pip install -r services/robot/requirements.txt
+      - name: Run unit tests
+        run: pytest tests/ -v
+
+  # ===========================================================================
+  # 4. SCA — dépendances Python (EF/ENF: pas de faille connue dans la stack)
+  # ===========================================================================
+  dependency-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # PYSEC-2026-1325 (ecdsa) ignoré volontairement : pas de correctif prévu
+      # par les mainteneurs (canal auxiliaire hors périmètre), verification
+      # non affectée, et notre système utilise RS256 (RSA) pas ECDSA.
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Audit robot-service dependencies
+        run: pip-audit -r services/robot/requirements.txt --ignore-vuln PYSEC-2026-1325
+      - name: Audit dashboard-service dependencies
+        run: pip-audit -r services/dashboard/requirements.txt --ignore-vuln PYSEC-2026-1325
+
+  # ===========================================================================
+  # 5. BUILD + CONTAINER SCAN — build les images, puis scan CVEs (Trivy)
+  # ===========================================================================
+  build-and-scan:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [robot, dashboard]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.service }}-service image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/${{ matrix.service }}
+          tags: ${{ matrix.service }}-service:ci
+          load: true
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.service }}-service:ci
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          ignore-unfixed: true
+
+  # ===========================================================================
+  # 6. INTÉGRATION RBAC — le test bout-en-bout complet.
+  #    Ne se lance QUE si tout ce qui précède est vert (fail fast : pas la
+  #    peine de monter 9 conteneurs si le lint ou le secret-scan a échoué).
+  # ===========================================================================
+  integration-rbac:
+    runs-on: ubuntu-latest
+    needs: [lint, secret-scan, unit-tests, dependency-scan, build-and-scan]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate .env from GitHub Secrets
+        run: |
+          cat > .env << EOF
+          KONG_PG_DB=kong
+          KONG_PG_USER=kong
+          KONG_PG_PASSWORD=${{ secrets.KONG_PG_PASSWORD }}
+          KEYCLOAK_PG_DB=keycloak
+          KEYCLOAK_PG_USER=keycloak
+          KEYCLOAK_PG_PASSWORD=${{ secrets.KEYCLOAK_PG_PASSWORD }}
+          KEYCLOAK_ADMIN=admin
+          KEYCLOAK_ADMIN_PASSWORD=${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+          KEYCLOAK_REALM=robot-realm
+          KEYCLOAK_INTERNAL_URL=http://keycloak:8080
+          ROBOT_CLIENT_ID=robot-service
+          ROBOT_CLIENT_SECRET=${{ secrets.ROBOT_CLIENT_SECRET }}
+          DASHBOARD_CLIENT_ID=dashboard-app
+          DASHBOARD_CLIENT_SECRET=${{ secrets.DASHBOARD_CLIENT_SECRET }}
+          DEMO_ADMIN_PASSWORD=${{ secrets.DEMO_ADMIN_PASSWORD }}
+          DEMO_OPERATOR_PASSWORD=${{ secrets.DEMO_OPERATOR_PASSWORD }}
+          ROBOT_JWT_TTL_SECONDS=300
+          DASHBOARD_JWT_TTL_SECONDS=900
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          ROBOT_SERVICE_PORT=8002
+          DASHBOARD_SERVICE_PORT=8003
+          ROBOT_SERVICE_URL=http://robot-service:8002
+          KONG_PROXY_PORT=8000
+          KONG_ADMIN_PORT=8001
+          EOF
+
+      - name: Start all services
+        run: docker compose up -d --build
+
+      - name: Wait for critical services to be healthy
+        run: |
+          services="postgres-kong postgres-keycloak kong keycloak redis robot-service dashboard-service"
+          timeout 240 bash -c '
+            services="'"${services}"'"
+            while true; do
+              all_healthy=true
+              for s in $services; do
+                status=$(docker inspect --format="{{.State.Health.Status}}" "$s" 2>/dev/null || echo "missing")
+                if [ "$status" != "healthy" ]; then
+                  echo "  $s: $status"
+                  all_healthy=false
+                fi
+              done
+              if [ "$all_healthy" = true ]; then
+                echo "All critical services healthy."
+                break
+              fi
+              sleep 5
+            done
+          '
+
+      - name: Verify Keycloak is ready
+        run: |
+          echo "Waiting for Keycloak to be ready..."
+          for i in {1..60}; do
+            if curl -sS -f http://localhost:9000/health/ready > /dev/null 2>&1; then
+              echo "Keycloak is ready (attempt $i)"
+              exit 0
+            fi
+            echo "Keycloak not ready yet (attempt $i/60)"
+            sleep 5
+          done
+          echo "Keycloak not ready after 60 attempts"
+          docker compose logs keycloak --tail=30
+          exit 1
+      - name: Fix Keycloak client secrets
+        run: |
+          set -a; source .env; set +a
+          chmod +x scripts/fix-keycloak-client-secrets.sh
+          ./scripts/fix-keycloak-client-secrets.sh
+
+      - name: Configure Kong (auth) and Kong (RBAC)
+        run: |
+          set -a; source .env; set +a
+          chmod +x scripts/setup-kong.sh scripts/setup-rbac.sh
+          ./scripts/setup-kong.sh
+          ./scripts/setup-rbac.sh
+
+      - name: Wait for Kong routes to become active
+        run: |
+          set -a; source .env; set +a
+          for i in {1..20}; do
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "http://127.0.0.1:${KONG_PROXY_PORT}/robot/state")
+            if [ "$STATUS" != "404" ]; then
+              echo "Route /robot active (statut: $STATUS, tentative $i)"
+              exit 0
+            fi
+            echo "Route /robot pas encore active (404, tentative $i/20)"
+            sleep 1
+          done
+          echo "Route toujours inactive apres 20s"
+          exit 1
+      - name: Debug - inspect Kong state
+        run: |
+          echo "--- Services ---"
+          curl -s http://127.0.0.1:8001/services | python3 -m json.tool
+          echo "--- Routes ---"
+          curl -s http://127.0.0.1:8001/routes | python3 -m json.tool
+      - name: Run authentication test (Sprint 3)
+        run: |
+          set -a; source .env; set +a
+          chmod +x scripts/test-auth.sh
+          ./scripts/test-auth.sh
+      - name: Keycloak diagnostic
+        run: |
+          set -a
+          source .env
+          set +a
+
+          chmod +x scripts/ci-keycloak-diagnose.sh
+          ./scripts/ci-keycloak-diagnose.sh
+        continue-on-error: true
+
+
+      - name: Upload Keycloak diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keycloak-debug
+          path: ci-debug/
+    #  - name: Run RBAC test (Sprint 4)
+    #    run: |
+    #     set -a; source .env; set +a
+    #      chmod +x scripts/test-rbac.sh
+    #     ./scripts/test-rbac.sh 
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --tail=100
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v

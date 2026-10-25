@@ -81,7 +81,7 @@
         {
           "type": "password",
           "value": "${env.DEMO_ADMIN_PASSWORD}",
-          "temporary": true
+          "temporary": false
         }
       ],
       "realmRoles": ["admin"]
@@ -95,12 +95,10 @@
         {
           "type": "password",
           "value": "${env.DEMO_OPERATOR_PASSWORD}",
-          "temporary": true
+          "temporary": false
         }
       ],
       "realmRoles": ["operator"]
     }
-  ],
-  "_comment_service_account_role": "The robot-service client's built-in service account must be assigned the 'robot' realm role after import — Keycloak's realm-export JSON does not reliably wire service-account role mappings on first import across versions. Do this once via: Admin Console > Clients > robot-service > Service Account Roles > Assign role > robot. Sprint 3 docs will include the equivalent kcadm.sh / Admin REST command for reproducibility.",
-  "_comment_secrets": "Placeholders like ${env.ROBOT_CLIENT_SECRET} are resolved by Keycloak's config value providers at import time, sourced from environment variables — never hardcode real secrets in this file (ENF-05/ENF-08). Demo user passwords are marked temporary so they must be changed on first login."
+  ]
 }

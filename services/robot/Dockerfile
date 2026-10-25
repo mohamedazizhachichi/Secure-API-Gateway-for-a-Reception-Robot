@@ -6,11 +6,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
+COPY rbac.py .
+COPY jwt_middleware.py .
 
-# Non-root user (basic hardening, cheap to do)
 RUN useradd -m appuser
 USER appuser
 
-EXPOSE 8001
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+# Utilise la variable d'environnement SERVICE_PORT
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port $SERVICE_PORT"]
